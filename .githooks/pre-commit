@@ -23,7 +23,7 @@ SEVEN_ZIP=$(resolve_7z) || {
 pack_encrypted_archive "$SEVEN_ZIP" "$PASSWORD"
 
 if [ $? -ne 0 ]; then
-    echo "[!] Ошибка шифрования! Неверный пароль в .secret."
+    echo "[!] Ошибка архивации 7-Zip. Возможные причины: файл data.7z занят другим процессом или неверный пароль в .secret."
     exit 1
 fi
 

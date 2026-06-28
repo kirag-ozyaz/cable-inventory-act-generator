@@ -56,6 +56,29 @@ needs_unpack() {
     return 1
 }
 
+kill_lingering_7z() {
+    if command -v taskkill >/dev/null 2>&1; then
+        taskkill //F //IM 7z.exe >/dev/null 2>&1 || taskkill -F -IM 7z.exe >/dev/null 2>&1
+    elif command -v pkill >/dev/null 2>&1; then
+        pkill -f '7z' >/dev/null 2>&1
+    fi
+}
+
+release_archive_lock() {
+    rm -f data.7z 2>/dev/null
+    if [ -f data.7z ]; then
+        echo "[!] data.7z занят другим процессом 7z.exe — завершаю его..."
+        kill_lingering_7z
+        sleep 1
+        rm -f data.7z 2>/dev/null
+    fi
+    if [ -f data.7z ]; then
+        echo "[!] Не удалось освободить data.7z. Закройте программу, открывшую файл."
+        return 1
+    fi
+    return 0
+}
+
 pack_encrypted_archive() {
     local seven_zip=$1
     local password=$2
@@ -68,7 +91,7 @@ pack_encrypted_archive() {
         paths+=("./$PEOPLE_FILE")
     fi
 
-    rm -f data.7z
+    release_archive_lock || return 1
     "$seven_zip" a -t7z -mhe=on -p"$password" data.7z "${paths[@]}"
 }
 

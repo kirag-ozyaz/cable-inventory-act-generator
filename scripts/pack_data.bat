@@ -37,6 +37,16 @@ set /p PASSWORD=<.secret
 
 echo [+] Шифрую Data\ и templates\.people.xlsx в data.7z...
 if exist data.7z del /f data.7z
+if exist data.7z (
+    echo [!] data.7z занят другим процессом 7z.exe — завершаю его...
+    taskkill /F /IM 7z.exe >nul 2>&1
+    timeout /t 1 /nobreak >nul
+    del /f data.7z 2>nul
+)
+if exist data.7z (
+    echo [!] Не удалось освободить data.7z. Закройте программу, открывшую файл.
+    exit /b 1
+)
 
 
 set "ARCHIVE_ARGS="
