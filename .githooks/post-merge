@@ -8,15 +8,15 @@ if [ ! -f "data.7z" ]; then
     exit 0
 fi
 
-echo "[+] �������� �������������� ����� � Data/..."
+echo "[+] Расшифровываю data.7z в Data/..."
 
 PASSWORD=$(read_password) || {
-    echo "[!] ���� .secret �� ������. ���������� ���������."
+    echo "[!] Файл .secret не найден. Распаковка пропущена."
     exit 0
 }
 
 SEVEN_ZIP=$(resolve_7z) || {
-    echo "[!] 7-Zip �� ������."
+    echo "[!] 7-Zip не найден."
     exit 1
 }
 
@@ -26,7 +26,7 @@ mkdir -p Data
 "$SEVEN_ZIP" x -p"$PASSWORD" -oData data.7z -y > /dev/null 2>&1
 
 if [ $? -eq 0 ]; then
-    echo "[V] ����� ��������� � Data/"
+    echo "[V] Файлы расшифрованы в Data/"
 else
-    echo "[!] ������ �����������. ������� ������ � .secret."
+    echo "[!] Ошибка расшифровки. Неверный пароль?"
 fi

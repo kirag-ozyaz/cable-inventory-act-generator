@@ -64,14 +64,15 @@ python scripts/make_checklists_async.py --inv 7260 --act 4167 --date 2026-06-20 
 
 ```
 SKS/
-├── Data/                              # Исходные Excel (не в git)
+├── .secret                            # Пароль для data.7z (локально, не в git)
+├── Data/                              # Исходные Excel (не в git, только локально)
 ├── templates/
 │   └── чек-лист_акт_шаблон.xlsx       # Шаблон выходного документа
 ├── .githooks/                         # Git hooks: шифрование Data/ → data.7z
 │   ├── pre-commit
 │   ├── post-merge
 │   └── post-checkout
-├── setup.bat                          # Подключить hooks (один раз)
+├── setup_hooks.bat                    # Подключить hooks (один раз)
 ├── scripts/
 │   ├── make_checklist.py              # Один инв. № (синхронно)
 │   ├── make_checklists_async.py       # Пакетная генерация
@@ -357,12 +358,41 @@ flowchart LR
 
 ### Шифрование Data/ (data.7z)
 
-Excel-файлы из `Data/` хранятся в git только в виде зашифрованного архива `data.7z`. Пароль — в локальном файле `.secret` (не в git).
+Excel-файлы из `Data/` хранятся в git только в виде зашифрованного архива `data.7z`. 
+Пароль — в локальном файле `.secret` (не в git).
 
-**Один раз настроить:**
+### Файл `.secret` (пароль шифрования)
+
+В корне проекта нужен локальный файл **`.secret`** — одна строка с паролем для `data.7z`.
+
+**Создание (один раз на каждом компьютере):**
 
 ```powershell
-setup.bat
+cd X:\Project\SKS
+notepad .secret
+```
+
+Впишите пароль **одной строкой**, сохраните. Пример содержимого файла:
+
+```text
+MyStrongPassword123
+```
+
+| | |
+|---|---|
+| Где лежит | `X:\Project\SKS\.secret` |
+| Формат | одна строка, без кавычек |
+| В git | **нет** (в `.gitignore`) |
+| Зачем | упаковка `Data/` → `data.7z` и распаковка обратно |
+
+Без `.secret` не работают `scripts\pack_data.bat` и git hooks — шифрование пропускается или коммит прерывается с ошибкой.
+
+Пароль нужно передать коллегам **отдельно** (мессенджер, лично и т.п.), не через GitHub.
+
+**Один раз настроить hooks:**
+
+```powershell
+setup_hooks.bat
 ```
 
 **Как работает:**
