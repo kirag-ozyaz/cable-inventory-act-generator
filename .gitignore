@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# Сгенерированные отчёты
+output/
+
+# Исходные Excel (большие, локальные)
+Data/
+
+# Временные файлы Excel
+~$*.xlsx
