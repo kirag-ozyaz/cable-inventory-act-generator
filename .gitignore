@@ -20,3 +20,5 @@ Data/
 
 # Временные файлы Excel
 ~$*.xlsx
+
+.secret

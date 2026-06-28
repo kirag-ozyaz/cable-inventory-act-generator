@@ -340,3 +340,53 @@ flowchart LR
 | Список кабелей | 25.06.2026 | Версия для инвентаризации |
 
 При обновлении справочников достаточно заменить файлы в `Data/` с теми же шаблонами имён (см. `src/loaders/paths.py`).
+
+---
+
+## Git
+
+Репозиторий: [github.com/kirag-ozyaz/cable-inventory-act-generator](https://github.com/kirag-ozyaz/cable-inventory-act-generator)
+
+В git попадают только код, шаблон и README. Каталоги `Data/`, `output/`, `.venv/`, IDE и скрытые файлы (`.people.xlsx` и др.) — в `.gitignore`.
+
+### Первый коммит и push
+
+```powershell
+cd X:\Project\SKS
+
+git rm -r --cached -f .
+git add .gitignore README.md requirements.txt main.py scripts/ src/ templates/
+git status
+
+git commit -m "Initial commit: cable inventory checklist and act generator"
+git branch -M main
+git remote add origin https://github.com/kirag-ozyaz/cable-inventory-act-generator.git
+git push -u origin main
+```
+
+Если `origin` уже добавлен:
+
+```powershell
+git remote set-url origin https://github.com/kirag-ozyaz/cable-inventory-act-generator.git
+git push -u origin main
+```
+
+> Пока нет ни одного коммита, `git reset HEAD` не работает — используйте `git rm -r --cached -f .`
+
+### Убрать файл из git, но оставить на диске
+
+```powershell
+git rm --cached "templates/.people.xlsx"
+git add .gitignore
+git commit -m "Stop tracking local template file"
+git push
+```
+
+### Обычные изменения
+
+```powershell
+git add .
+git status
+git commit -m "Описание изменений"
+git push
+```
