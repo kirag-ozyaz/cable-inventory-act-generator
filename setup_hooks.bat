@@ -4,7 +4,7 @@ setlocal
 
 cd /d "%~dp0"
 
-echo Настройка git hooks для шифрования Data/ ^-^> data.7z...
+echo Настройка git hooks для шифрования Data/ и templates/.people.xlsx ^-^> data.7z...
 git config core.hooksPath .githooks
 
 if exist ".githooks\pre-commit" (

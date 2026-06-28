@@ -8,7 +8,7 @@ if [ ! -f "data.7z" ]; then
     exit 0
 fi
 
-echo "[+] Расшифровываю data.7z в Data/..."
+echo "[+] Расшифровываю data.7z в Data/ и templates/.people.xlsx..."
 
 PASSWORD=$(read_password) || {
     echo "[!] Файл .secret не найден. Распаковка пропущена."
@@ -21,12 +21,12 @@ SEVEN_ZIP=$(resolve_7z) || {
 }
 
 rm -rf Data
-mkdir -p Data
+rm -f "$PEOPLE_FILE"
 
-"$SEVEN_ZIP" x -p"$PASSWORD" -oData data.7z -y > /dev/null 2>&1
+unpack_encrypted_archive "$SEVEN_ZIP" "$PASSWORD"
 
 if [ $? -eq 0 ]; then
-    echo "[V] Файлы расшифрованы в Data/"
+    echo "[V] Файлы расшифрованы в Data/ и templates/"
 else
     echo "[!] Ошибка расшифровки. Неверный пароль?"
 fi

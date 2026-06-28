@@ -354,11 +354,11 @@ flowchart LR
 
 Репозиторий: [github.com/kirag-ozyaz/cable-inventory-act-generator](https://github.com/kirag-ozyaz/cable-inventory-act-generator)
 
-В git попадают код, шаблон, README и **зашифрованный** `data.7z`. **Не попадают:** открытая папка `Data/`, `.secret`, `output/`, `.venv/`, IDE, `templates/.people.xlsx`.
+В git попадают код, шаблон, README и **зашифрованный** `data.7z`. **Не попадают:** открытая папка `Data/`, `.secret`, `output/`, `.venv/`, IDE, `templates/.people.xlsx` (он внутри `data.7z`).
 
-### Шифрование Data/ (data.7z)
+### Шифрование Data/ и templates/.people.xlsx (data.7z)
 
-Excel-файлы из `Data/` хранятся в git только в виде зашифрованного архива `data.7z`. 
+Excel-файлы из `Data/` и справочник `templates/.people.xlsx` хранятся в git только в виде зашифрованного архива `data.7z`.
 Пароль — в локальном файле `.secret` (не в git).
 
 ### Файл `.secret` (пароль шифрования)
@@ -383,7 +383,7 @@ MyStrongPassword123
 | Где лежит | `X:\Project\SKS\.secret` |
 | Формат | одна строка, без кавычек |
 | В git | **нет** (в `.gitignore`) |
-| Зачем | упаковка `Data/` → `data.7z` и распаковка обратно |
+| Зачем | упаковка `Data/` и `templates/.people.xlsx` → `data.7z` и распаковка обратно |
 
 Без `.secret` не работают `scripts\pack_data.bat` и git hooks — шифрование пропускается или коммит прерывается с ошибкой.
 
@@ -399,9 +399,9 @@ setup_hooks.bat
 
 | Когда | Что происходит |
 |-------|----------------|
-| `git commit` | hook `pre-commit` упаковывает `Data/` → `data.7z` и добавляет архив в коммит |
-| `git pull` / merge | hook `post-merge` распаковывает `data.7z` → `Data/` |
-| clone / checkout | hook `post-checkout` распаковывает, если `Data/` пуста |
+| `git commit` | hook `pre-commit` упаковывает `Data/` и `templates/.people.xlsx` → `data.7z` и добавляет архив в коммит |
+| `git pull` / merge | hook `post-merge` распаковывает `data.7z` → `Data/` и `templates/.people.xlsx` |
+| clone / checkout | hook `post-checkout` распаковывает, если `Data/` пуста или нет `templates/.people.xlsx` |
 
 **Ручная упаковка (без коммита):**
 
