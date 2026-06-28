@@ -1,18 +1,23 @@
 @echo off
-:: chcp 65001 >nul
-echo Настройка автоматического шифрования...
+chcp 65001 >nul
+setlocal
 
-:: Указываем git использовать хуки из папки .githooks
+cd /d "%~dp0.."
+
+echo Настройка git hooks для шифрования Data/ ^-^> data.7z...
 git config core.hooksPath .githooks
 
-:: Делаем хуки исполняемыми (для Git Bash)
-git update-index --chmod=+x .githooks/pre-commit
-git update-index --chmod=+x .githooks/post-checkout
-git update-index --chmod=+x .githooks/post-merge
+if exist ".githooks\pre-commit" (
+    git add --chmod=+x .githooks/pre-commit .githooks/post-checkout .githooks/post-merge .githooks/_common.sh 2>nul
+)
 
 echo.
-echo [V] Готово! Теперь git будет автоматически:
-echo    - шифровать файлы перед коммитом
-echo    - расшифровывать после pull/clone
+echo [V] Готово!
+echo    pre-commit    - шифрует Data/ перед коммитом
+echo    post-merge    - расшифровывает после pull
+echo    post-checkout - расшифровывает после clone/checkout
+echo.
+echo Нужны: 7-Zip и файл .secret в корне проекта.
+echo Ручная упаковка: scripts\pack_data.bat
 echo.
 pause

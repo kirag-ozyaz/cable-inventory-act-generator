@@ -1,0 +1,32 @@
+#!/bin/bash
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=_common.sh
+source "$HOOK_DIR/_common.sh"
+
+if [ ! -f "data.7z" ]; then
+    exit 0
+fi
+
+echo "[+] �������� �������������� ����� � Data/..."
+
+PASSWORD=$(read_password) || {
+    echo "[!] ���� .secret �� ������. ���������� ���������."
+    exit 0
+}
+
+SEVEN_ZIP=$(resolve_7z) || {
+    echo "[!] 7-Zip �� ������."
+    exit 1
+}
+
+rm -rf Data
+mkdir -p Data
+
+"$SEVEN_ZIP" x -p"$PASSWORD" -oData data.7z -y > /dev/null 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "[V] ����� ��������� � Data/"
+else
+    echo "[!] ������ �����������. ������� ������ � .secret."
+fi

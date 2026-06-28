@@ -1,0 +1,35 @@
+#!/bin/bash
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=_common.sh
+source "$HOOK_DIR/_common.sh"
+
+if [ ! -f "data.7z" ]; then
+    exit 0
+fi
+
+if [ -d "Data" ] && [ -n "$(ls -A Data 2>/dev/null)" ]; then
+    exit 0
+fi
+
+echo "[+] Расшифровываю data.7z в Data/..."
+
+PASSWORD=$(read_password) || {
+    echo "[!] Файл .secret не найден. Распаковка пропущена."
+    exit 0
+}
+
+SEVEN_ZIP=$(resolve_7z) || {
+    echo "[!] 7-Zip не найден."
+    exit 1
+}
+
+mkdir -p Data
+
+"$SEVEN_ZIP" x -p"$PASSWORD" -oData data.7z -y > /dev/null 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "[V] Файлы расшифрованы в Data/"
+else
+    echo "[!] Ошибка расшифровки. Неверный пароль?"
+fi

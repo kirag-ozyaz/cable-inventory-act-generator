@@ -5,20 +5,23 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
-# IDE
+# IDE и редакторы
 .idea/
 .vscode/
+.cursor/
 
-# Скрытые файлы и каталоги (начинаются с точки), кроме .gitignore
-.*
-!.gitignore
+# Локальные секреты и служебные скрытые файлы (не в git!)
+.secret
+templates/.people.xlsx
+**/.people.xlsx
+.DS_Store
 
 # Сгенерированные отчёты
 output/
-# Исходные Excel (большие, локальные)
+
+# Исходные Excel (большие, локальные; в git только зашифрованный data.7z)
 Data/
+!data.7z
 
 # Временные файлы Excel
 ~$*.xlsx
-
-.secret

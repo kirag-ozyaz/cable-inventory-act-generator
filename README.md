@@ -67,10 +67,16 @@ SKS/
 ├── Data/                              # Исходные Excel (не в git)
 ├── templates/
 │   └── чек-лист_акт_шаблон.xlsx       # Шаблон выходного документа
+├── .githooks/                         # Git hooks: шифрование Data/ → data.7z
+│   ├── pre-commit
+│   ├── post-merge
+│   └── post-checkout
+├── setup.bat                          # Подключить hooks (один раз)
 ├── scripts/
 │   ├── make_checklist.py              # Один инв. № (синхронно)
 │   ├── make_checklists_async.py       # Пакетная генерация
-│   └── make_template.py               # Служебный: подготовка шаблона
+│   ├── make_template.py               # Служебный: подготовка шаблона
+│   └── pack_data.bat                  # Ручная упаковка Data/ → data.7z
 ├── src/
 │   ├── generator.py                   # Заполнение шаблона
 │   └── loaders/                       # Чтение справочников
@@ -347,7 +353,35 @@ flowchart LR
 
 Репозиторий: [github.com/kirag-ozyaz/cable-inventory-act-generator](https://github.com/kirag-ozyaz/cable-inventory-act-generator)
 
-В git попадают только код, шаблон и README. Каталоги `Data/`, `output/`, `.venv/`, IDE и скрытые файлы (`.people.xlsx` и др.) — в `.gitignore`.
+В git попадают код, шаблон, README и **зашифрованный** `data.7z`. **Не попадают:** открытая папка `Data/`, `.secret`, `output/`, `.venv/`, IDE, `templates/.people.xlsx`.
+
+### Шифрование Data/ (data.7z)
+
+Excel-файлы из `Data/` хранятся в git только в виде зашифрованного архива `data.7z`. Пароль — в локальном файле `.secret` (не в git).
+
+**Один раз настроить:**
+
+```powershell
+setup.bat
+```
+
+**Как работает:**
+
+| Когда | Что происходит |
+|-------|----------------|
+| `git commit` | hook `pre-commit` упаковывает `Data/` → `data.7z` и добавляет архив в коммит |
+| `git pull` / merge | hook `post-merge` распаковывает `data.7z` → `Data/` |
+| clone / checkout | hook `post-checkout` распаковывает, если `Data/` пуста |
+
+**Ручная упаковка (без коммита):**
+
+```powershell
+scripts\pack_data.bat
+```
+
+Нужен [7-Zip](https://www.7-zip.org/) (`C:\Program Files\7-Zip\7z.exe`).
+
+> **Важно:** `.gitignore` сам должен быть в репозитории — это нормально. Но если файл уже успели закоммитить **до** добавления в ignore, он останется в **истории** на GitHub даже после `git rm --cached`. Тогда нужна очистка истории (ниже).
 
 ### Первый коммит и push
 
@@ -381,6 +415,19 @@ git add .gitignore
 git commit -m "Stop tracking local template file"
 git push
 ```
+
+### Удалить файл из истории GitHub (если уже успели запушить)
+
+Если `templates/.people.xlsx` или другой локальный файл попал в старый коммит на GitHub:
+
+```powershell
+git filter-branch --force --index-filter "git rm -rf --cached --ignore-unmatch templates/.people.xlsx" --prune-empty -- --all
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+git push --force origin main
+```
+
+После `--force` история на GitHub перезаписывается без этого файла. **Предупреждение:** force push на `main` — только если вы один работаете с репозиторием.
 
 ### Обычные изменения
 
