@@ -7,10 +7,10 @@
 сопоставление инв. № между графиком и списком кабелей.
 
 Примеры:
-    python scripts/make_checklists_async.py
-    python scripts/make_checklists_async.py --inv 7260 425
-    python scripts/make_checklists_async.py --inv 7260 --act 4167 --date 20.06.2026
-    python scripts/make_checklists_async.py --workers 8 -o output/
+    python scripts/v1/make_checklists_async.py
+    python scripts/v1/make_checklists_async.py --inv 7260 425
+    python scripts/v1/make_checklists_async.py --inv 7260 --act 4167 --date 20.06.2026
+    python scripts/v1/make_checklists_async.py --workers 8 -o output/
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 # openpyxl шумит этим предупреждением при каждой загрузке шаблона (по разу

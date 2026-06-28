@@ -2,7 +2,7 @@
 chcp 65001 >nul
 setlocal
 
-cd /d "%~dp0.."
+cd /d "%~dp0..\.."
 
 if not exist "data.7z" (
     echo [!] Файл data.7z не найден в корне проекта.

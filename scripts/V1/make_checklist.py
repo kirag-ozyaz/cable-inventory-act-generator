@@ -4,9 +4,9 @@
 При более 10 объектах — ``чек-лист_{инв}_1.xlsx``, ``…_2.xlsx``, …
 
 Примеры:
-    python scripts/make_checklist.py
-    python scripts/make_checklist.py 7260
-    python scripts/make_checklist.py 7260 --act 4167 --date 20.06.2026
+    python scripts/v1/make_checklist.py
+    python scripts/v1/make_checklist.py 7260
+    python scripts/v1/make_checklist.py 7260 --act 4167 --date 20.06.2026
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from src.generator import ChecklistError, generate_checklist  # noqa: E402

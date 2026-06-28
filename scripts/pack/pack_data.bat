@@ -4,7 +4,7 @@ setlocal
 
 
 
-cd /d "%~dp0.."
+cd /d "%~dp0..\.."
 
 if not exist ".secret" (
     echo [!] Файл .secret не найден в корне проекта.

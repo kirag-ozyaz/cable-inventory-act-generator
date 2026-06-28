@@ -7,7 +7,7 @@
   - убирает внешние книги и calcChain.
 
 Запуск:
-    python scripts/make_template.py
+    python scripts/v1/make_template.py
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from src.loaders.paths import template_path  # noqa: E402

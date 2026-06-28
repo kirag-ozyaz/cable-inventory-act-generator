@@ -4,7 +4,32 @@
 
 Python-генератор читает три справочника из `Data/`, заполняет шаблон и сохраняет готовый `.xlsx` в `output/`. Данные из `Data/` подставляются **значениями** (без ссылок `[1]`, `[2]`, `[3]`). Блок представителей на листе чек-листа по-прежнему тянется из **`templates/.people.xlsx`** — при генерации этот файл **копируется** в каталог вывода рядом с чек-листами.
 
-**Рекомендуется генератор v2** (`scripts/v2/`) — сохраняет оформление шаблона (границы, стили, область печати) в Excel 2016 и 2021. Старые скрипты в `scripts/` (без `v2`) оставлены для совместимости.
+**Рекомендуется генератор v2** (`scripts/v2/`) — сохраняет оформление шаблона (границы, стили, область печати) в Excel 2016 и 2021. Старые скрипты в `scripts/v1/` оставлены для совместимости. Bat-файлы упаковки `data.7z` — в `scripts/pack/`.
+
+---
+
+## Каталог `scripts/`
+
+| Папка | Назначение | Основные файлы |
+|-------|------------|----------------|
+| **`scripts/v2/`** | Генерация чек-листов (рекомендуется) | `make_checklist.py`, `make_checklists_async.py`, `compare_xlsx.py` |
+| **`scripts/v1/`** | Генерация через openpyxl.save (устарело) | `make_checklist.py`, `make_checklists_async.py`, `make_template.py` |
+| **`scripts/pack/`** | Ручная упаковка / распаковка `data.7z` | `pack_data.bat`, `unpack_data.bat` |
+
+```powershell
+# v2 — один чек-лист
+python scripts/v2/make_checklist.py 7260
+
+# v2 — пакет
+python scripts/v2/make_checklists_async.py --inv 7260 425 --workers 10
+
+# v1 — только если нужна совместимость со старым save
+python scripts/v1/make_checklist.py 7260
+
+# data.7z вручную
+scripts\pack\pack_data.bat
+scripts\pack\unpack_data.bat
+```
 
 ---
 
@@ -48,7 +73,7 @@ python scripts/v2/make_checklists_async.py --inv 7260 425 --workers 10 -o output
 
 #### Чем v2 отличается от v1
 
-| | **v1** — `scripts/make_checklist*.py` | **v2** — `scripts/v2/` |
+| | **v1** — `scripts/v1/` | **v2** — `scripts/v2/` |
 |---|--------------------------------------|-------------------------|
 | Сохранение | `openpyxl.save()` перезаписывает xlsx | zip-merge: оформление из шаблона |
 | Границы / стили | могут пропадать в Excel 2021 | сохраняются |
@@ -59,9 +84,11 @@ python scripts/v2/make_checklists_async.py --inv 7260 425 --workers 10 -o output
 
 ### Генератор v1 (устаревший)
 
-Оба скрипта вызывают `generate_checklist()` из `src/generator.py`. Содержимое ячеек совпадает с v2, но оформление файла может отличаться от шаблона.
+> Для новых задач используйте **`scripts/v2/`**. Раздел ниже — для совместимости и отладки.
 
-| | **Синхронный** — `scripts/make_checklist.py` | **Пакетный** — `scripts/make_checklists_async.py` |
+Оба скрипта вызывают `generate_checklist()` из `src/generator.py`. Содержимое ячеек совпадает с v2, но оформление файла может отличаться от шаблона. Подготовка шаблона: `python scripts/v1/make_template.py`.
+
+| | **Синхронный** — `scripts/v1/make_checklist.py` | **Пакетный** — `scripts/v1/make_checklists_async.py` |
 |---|--------------------------------------|-------------------------------------------|
 | **Когда использовать** | один инв. №, проверка, отладка | массовая генерация (~6200 номеров или свой список) |
 | **Инв. №** | позиционный аргумент (`7260`) | `--inv 7260 425 …`; без `--inv` — все номера, которые есть **и в графике, и в списке кабелей** |
@@ -77,8 +104,8 @@ python scripts/v2/make_checklists_async.py --inv 7260 425 --workers 10 -o output
 ### Синхронно — один чек-лист (v1)
 
 ```powershell
-python scripts/make_checklist.py 7260
-python scripts/make_checklist.py 7260 --act 4167 --date "20.06.2026"
+python scripts/v1/make_checklist.py 7260
+python scripts/v1/make_checklist.py 7260 --act 4167 --date "20.06.2026"
 ```
 
 | Параметр | Описание |
@@ -96,13 +123,13 @@ python scripts/make_checklist.py 7260 --act 4167 --date "20.06.2026"
 
 ```powershell
 # все номера, которые есть и в графике, и в списке кабелей (~6200)
-python scripts/make_checklists_async.py
+python scripts/v1/make_checklists_async.py
 
 # только указанные номера
-python scripts/make_checklists_async.py --inv 7260 425 1234
+python scripts/v1/make_checklists_async.py --inv 7260 425 1234
 
 # с параметрами акта и параллелизмом
-python scripts/make_checklists_async.py --inv 7260 --act 4167 --date "20.06.2026" --workers 10 -o output/
+python scripts/v1/make_checklists_async.py --inv 7260 --act 4167 --date "20.06.2026" --workers 10 -o output/
 ```
 
 | Параметр | Описание |
@@ -137,20 +164,23 @@ SKS/
 │   ├── чек-лист_акт_шаблон.xlsx       # Шаблон выходного документа
 │   └── .people.xlsx                   # Справочник представителей (внешняя ссылка шаблона)
 ├── .githooks/                         # Git hooks: шифрование Data/ → data.7z
+│   ├── _common.sh                     # Общие функции (упаковка, распаковка, 7z)
 │   ├── pre-commit
 │   ├── post-merge
 │   └── post-checkout
 ├── setup_hooks.bat                    # Подключить hooks (один раз)
 ├── scripts/
-│   ├── make_checklist.py              # v1: один инв. № (устаревший save)
-│   ├── make_checklists_async.py       # v1: пакетная генерация
+│   ├── v1/                            # Устаревший save через openpyxl
+│   │   ├── make_checklist.py          # Один инв. №
+│   │   ├── make_checklists_async.py   # Пакетная генерация
+│   │   └── make_template.py           # Служебный: подготовка шаблона
 │   ├── v2/                            # Рекомендуется: zip-merge, оформление шаблона
 │   │   ├── make_checklist.py          # Один инв. №
 │   │   ├── make_checklists_async.py   # Пакетная генерация
 │   │   └── compare_xlsx.py            # Сравнение с эталоном xlsx
-│   ├── make_template.py               # Служебный: подготовка шаблона
-│   ├── pack_data.bat                  # Ручная упаковка Data/ → data.7z
-│   └── unpack_data.bat                # Ручная распаковка data.7z → Data/, templates/
+│   └── pack/                          # Упаковка / распаковка data.7z
+│       ├── pack_data.bat              # Data/ → data.7z
+│       └── unpack_data.bat            # data.7z → Data/, templates/
 ├── src/
 │   ├── generator.py                   # Заполнение шаблона (общее для v1 и v2)
 │   ├── v2/
@@ -315,7 +345,7 @@ VLOOKUP(V9, [2]Лист1!$A:$L, 12, 0)
 
 Шаблон содержит **отдельную** внешнюю ссылку на `templates/.people.xlsx` (не `[1]`–`[3]`). Формулы блока представителей на листе чек-листа обращаются к этому файлу.
 
-При каждой генерации (`scripts/v2/make_checklist.py`, `scripts/v2/make_checklists_async.py`, а также скрипты v1) справочник копируется в каталог вывода как `output/.people.xlsx`, чтобы Excel находил его рядом с чек-листами. Передавать на другой ПК нужно **вместе** с папкой `output/` (или скопировать `.people.xlsx` в ту же папку, что и чек-лист).
+При каждой генерации (`scripts/v2/…`, `scripts/v1/…`) справочник копируется в каталог вывода как `output/.people.xlsx`, чтобы Excel находил его рядом с чек-листами. Передавать на другой ПК нужно **вместе** с папкой `output/` (или скопировать `.people.xlsx` в ту же папку, что и чек-лист).
 
 ---
 
@@ -347,7 +377,8 @@ flowchart LR
 - Копирование `templates/.people.xlsx` в каталог вывода (внешняя ссылка для блока представителей).
 - Несколько объектов на один инв. № — отдельные строки в акте/чек-листе; при >10 объектах — разбиение на несколько файлов.
 - CLI v2: `scripts/v2/make_checklist.py`, `scripts/v2/make_checklists_async.py` (рекомендуется).
-- CLI v1: `scripts/make_checklist.py`, `scripts/make_checklists_async.py` (устаревший save через openpyxl).
+- CLI v1: `scripts/v1/make_checklist.py`, `scripts/v1/make_checklists_async.py` (устаревший save через openpyxl).
+- Упаковка данных: `scripts/pack/pack_data.bat`, `scripts/pack/unpack_data.bat`.
 - Preflight-проверки; отчёты о расхождениях инв. № и подстанциях без координат (в консоли и в `output/расхождения.txt`).
 - Прогресс-бар, обработка Ctrl+C.
 
@@ -417,31 +448,60 @@ MyStrongPassword123
 | В git | **нет** (в `.gitignore`) |
 | Зачем | упаковка `Data/` и `templates/.people.xlsx` → `data.7z` и распаковка обратно |
 
-Без `.secret` не работают `scripts\pack_data.bat` и git hooks — шифрование пропускается или коммит прерывается с ошибкой.
+Без `.secret` не работают `scripts\pack\pack_data.bat` и git hooks — шифрование пропускается или коммит прерывается с ошибкой.
 
 Пароль нужно передать коллегам **отдельно** (мессенджер, лично и т.п.), не через GitHub.
 
-**Один раз настроить hooks:**
+**Один раз настроить hooks** (после `git clone` на новом компьютере):
 
 ```powershell
 setup_hooks.bat
 ```
 
+Команда задаёт `core.hooksPath = .githooks` в локальном конфиге Git. Повторять после каждого `git pull` **не нужно** — при pull файлы в `.githooks/` обновляются как обычные файлы репозитория, а хуки сразу используют новую версию.
+
 **Как работает:**
 
 | Когда | Что происходит |
 |-------|----------------|
-| `git commit` | hook `pre-commit` упаковывает `Data/` и `templates/.people.xlsx` → `data.7z` и добавляет архив в коммит |
+| `git commit` | hook `pre-commit` упаковывает `Data/` и `templates/.people.xlsx` → `data.7z` и добавляет архив в коммит; при занятом `data.7z` зависший `7z.exe` завершается автоматически |
 | `git pull` / merge | hook `post-merge` распаковывает `data.7z` → `Data/` и `templates/.people.xlsx` |
 | clone / checkout | hook `post-checkout` распаковывает, если `Data/` пуста или нет `templates/.people.xlsx` |
+
+**Если `git pull` ругается на локальные правки в `.githooks/`:**
+
+Git может отказать с сообщением вроде `Your local changes ... would be overwritten by merge` — это значит, что у вас есть незакоммиченные изменения в хуках, а на remote пришла другая версия тех же файлов.
+
+Посмотреть, что именно изменено (если файлы уже в staging — нужен `--staged`):
+
+```powershell
+git diff --staged .githooks/
+```
+
+Временно отложить локальные правки, подтянуть remote и вернуть свои изменения:
+
+```powershell
+git stash push --staged -m "local githooks"
+git pull origin main
+git stash pop
+```
+
+Если после `git stash pop` будут конфликты — откройте файлы в `.githooks/`, соберите нужную версию, затем `git add` и commit.
+
+Если локальные правки уже готовы к сохранению — проще закоммитить и потом pull:
+
+```powershell
+git commit -m "fix: правки git hooks"
+git pull origin main
+```
 
 **Ручная упаковка и распаковка (без коммита):**
 
 Перед упаковкой справочник представителей должен лежать в **`templates/.people.xlsx`** (не в корне проекта).
 
 ```powershell
-scripts\pack_data.bat      # Data/ + templates/.people.xlsx → data.7z
-scripts\unpack_data.bat    # data.7z → Data/ + templates/.people.xlsx
+scripts\pack\pack_data.bat      # Data/ + templates/.people.xlsx → data.7z
+scripts\pack\unpack_data.bat    # data.7z → Data/ + templates/.people.xlsx
 ```
 
 Нужен [7-Zip](https://www.7-zip.org/) (`C:\Program Files\7-Zip\7z.exe`).
