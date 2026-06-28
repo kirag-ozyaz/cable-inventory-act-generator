@@ -182,35 +182,129 @@ def _substation_issues(
     return not_in_catalog, no_coords
 
 
-def _print_substation_report(
+def _format_inv_discrepancies(
+    *,
+    missing_schedule: list[int],
+    missing_cables: list[int],
+    not_found: list[int],
+) -> list[str]:
+    """Строки отчёта о несогласованных инв. № между справочниками."""
+    if not missing_schedule and not missing_cables and not not_found:
+        return []
+
+    lines = [
+        "Отчёт о необработанных инв. №:",
+        "  Для перечисленных номеров чек-лист создать нельзя — "
+        "нет согласованных данных в обоих справочниках.",
+    ]
+
+    if missing_schedule:
+        nums = ", ".join(str(n) for n in missing_schedule)
+        lines.append(
+            f"  Есть в «Списке н/в кабелей», но нет в «Графике инвентаризации» "
+            f"({len(missing_schedule)}): {nums}"
+        )
+
+    if missing_cables:
+        nums = ", ".join(str(n) for n in missing_cables)
+        lines.append(
+            f"  Есть в «Графике инвентаризации», но нет в «Списке н/в кабелей» "
+            f"({len(missing_cables)}): {nums}"
+        )
+
+    if not_found:
+        nums = ", ".join(str(n) for n in not_found)
+        lines.append(
+            f"  Нет ни в графике, ни в списке кабелей "
+            f"(указаны в --inv, в справочниках не найдены) ({len(not_found)}): {nums}"
+        )
+
+    return lines
+
+
+def _format_substation_discrepancies(
     *,
     not_in_catalog: list[str],
     no_coords: list[str],
-) -> bool:
-    """Печатает отчёт о ТП/РП без координат; ``True``, если отчёт был выведен."""
+) -> list[str]:
+    """Строки отчёта о ТП/РП без координат."""
     if not not_in_catalog and not no_coords:
-        return False
+        return []
 
-    print()
-    print("Координаты начала КЛ (справочник подстанций):")
-    print(
+    lines = [
+        "Координаты начала КЛ (справочник подстанций):",
         "  Чек-листы создаются в любом случае; "
-        "для перечисленных ТП/РП координаты в чек-листе останутся пустыми."
-    )
+        "для перечисленных ТП/РП координаты в чек-листе останутся пустыми.",
+    ]
 
     if not_in_catalog:
         items = ", ".join(not_in_catalog)
-        print(
+        lines.append(
             f"  Упоминаются в кабелях, но отсутствуют в "
             f"«подстанции с координатами» ({len(not_in_catalog)}): {items}"
         )
 
     if no_coords:
         items = ", ".join(no_coords)
-        print(
+        lines.append(
             f"  Есть в справочнике, но широта/долгота не заполнены "
             f"({len(no_coords)}): {items}"
         )
+
+    return lines
+
+
+def _write_discrepancies_report(
+    output_dir: Path,
+    *,
+    missing_schedule: list[int],
+    missing_cables: list[int],
+    not_found: list[int],
+    tp_not_in_catalog: list[str],
+    tp_no_coords: list[str],
+) -> Path | None:
+    """Сохраняет отчёт о расхождениях в ``output_dir/расхождения.txt``."""
+    sections: list[str] = []
+
+    inv_lines = _format_inv_discrepancies(
+        missing_schedule=missing_schedule,
+        missing_cables=missing_cables,
+        not_found=not_found,
+    )
+    if inv_lines:
+        sections.append("\n".join(inv_lines))
+
+    sub_lines = _format_substation_discrepancies(
+        not_in_catalog=tp_not_in_catalog,
+        no_coords=tp_no_coords,
+    )
+    if sub_lines:
+        sections.append("\n".join(sub_lines))
+
+    if not sections:
+        return None
+
+    report_path = output_dir / "расхождения.txt"
+    report_path.write_text("\n\n".join(sections) + "\n", encoding="utf-8")
+    return report_path
+
+
+def _print_substation_report(
+    *,
+    not_in_catalog: list[str],
+    no_coords: list[str],
+) -> bool:
+    """Печатает отчёт о ТП/РП без координат; ``True``, если отчёт был выведен."""
+    lines = _format_substation_discrepancies(
+        not_in_catalog=not_in_catalog,
+        no_coords=no_coords,
+    )
+    if not lines:
+        return False
+
+    print()
+    for line in lines:
+        print(line)
 
     return True
 
@@ -229,11 +323,14 @@ def _preflight(
     list[int],
     list[int],
     list[int],
+    list[str],
+    list[str],
 ]:
     """Preflight: загрузка справочников, проверка структуры, отчёты о расхождениях.
 
     Returns:
-        ``(data, к обработке, в списке без графика, в графике без списка, нигде)``.
+        ``(data, к обработке, в списке без графика, в графике без списка, нигде,
+        ТП/РП нет в справочнике, ТП/РП без координат)``.
     """
     print("Проверка исходных данных...")
 
@@ -332,7 +429,15 @@ def _preflight(
         no_coords=tp_no_coords,
     )
 
-    return data, to_process, missing_schedule, missing_cables, not_found
+    return (
+        data,
+        to_process,
+        missing_schedule,
+        missing_cables,
+        not_found,
+        tp_not_in_catalog,
+        tp_no_coords,
+    )
 
 
 def _show_path(path: Path) -> Path:
@@ -375,36 +480,17 @@ def _print_missing_report(
     not_found: list[int],
 ) -> bool:
     """Печатает отчёт о инв. № без пары в обоих справочниках; ``True``, если выведен."""
-    if not missing_schedule and not missing_cables and not not_found:
+    lines = _format_inv_discrepancies(
+        missing_schedule=missing_schedule,
+        missing_cables=missing_cables,
+        not_found=not_found,
+    )
+    if not lines:
         return False
 
     print()
-    print("Отчёт о необработанных инв. №:")
-    print(
-        "  Для перечисленных номеров чек-лист создать нельзя — "
-        "нет согласованных данных в обоих справочниках."
-    )
-
-    if missing_schedule:
-        nums = ", ".join(str(n) for n in missing_schedule)
-        print(
-            f"  Есть в «Списке н/в кабелей», но нет в «Графике инвентаризации» "
-            f"({len(missing_schedule)}): {nums}"
-        )
-
-    if missing_cables:
-        nums = ", ".join(str(n) for n in missing_cables)
-        print(
-            f"  Есть в «Графике инвентаризации», но нет в «Списке н/в кабелей» "
-            f"({len(missing_cables)}): {nums}"
-        )
-
-    if not_found:
-        nums = ", ".join(str(n) for n in not_found)
-        print(
-            f"  Нет ни в графике, ни в списке кабелей "
-            f"(указаны в --inv, в справочниках не найдены) ({len(not_found)}): {nums}"
-        )
+    for line in lines:
+        print(line)
 
     return True
 
@@ -556,10 +642,29 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        data, to_process, missing_schedule, missing_cables, not_found = _preflight(args.inv)
+        (
+            data,
+            to_process,
+            missing_schedule,
+            missing_cables,
+            not_found,
+            tp_not_in_catalog,
+            tp_no_coords,
+        ) = _preflight(args.inv)
     except (ChecklistError, FileNotFoundError) as exc:
         print(f"Ошибка: {exc}", file=sys.stderr)
         return 1
+
+    report_path = _write_discrepancies_report(
+        args.output_dir,
+        missing_schedule=missing_schedule,
+        missing_cables=missing_cables,
+        not_found=not_found,
+        tp_not_in_catalog=tp_not_in_catalog,
+        tp_no_coords=tp_no_coords,
+    )
+    if report_path is not None:
+        print(f"Отчёт о расхождениях: {_show_path(report_path)}")
 
     if not to_process:
         print("Нет инвентарных номеров для обработки.")
