@@ -1,16 +1,13 @@
-"""Асинхронное создание чек-листов по одному или нескольким инв. №.
+"""Асинхронное создание чек-листов с сохранением оформления шаблона (zip-merge).
 
-Если ``--inv`` не указан — обрабатываются все номера из графика инвентаризации,
-для которых есть данные в списке кабелей.
-
-Перед генерацией выполняется проверка трёх справочников, шаблона и
-сопоставление инв. № между графиком и списком кабелей.
+Как ``make_checklists_async.py``, но финальный xlsx собирается из zip шаблона:
+``styles.xml``, drawings и printerSettings не перезаписываются openpyxl.
 
 Примеры:
-    python scripts/make_checklists_async.py
-    python scripts/make_checklists_async.py --inv 7260 425
-    python scripts/make_checklists_async.py --inv 7260 --act 4167 --date 20.06.2026
-    python scripts/make_checklists_async.py --workers 8 -o output/
+    python scripts/v2/make_checklists_async.py
+    python scripts/v2/make_checklists_async.py --inv 7260 425
+    python scripts/v2/make_checklists_async.py --inv 7260 --act 4167 --date 20.06.2026
+    python scripts/v2/make_checklists_async.py --workers 8 -o output/
 """
 
 from __future__ import annotations
@@ -29,7 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 # openpyxl шумит этим предупреждением при каждой загрузке шаблона (по разу
@@ -47,8 +44,8 @@ from src.generator import (  # noqa: E402
     ChecklistError,
     _schedule_column,
     extract_tp_name,
-    generate_checklist,
 )
+from src.v2 import generate_checklist  # noqa: E402
 from src.loaders import SourceData, load_all  # noqa: E402
 from src.loaders.paths import cables_path, schedule_path, substations_path  # noqa: E402
 
@@ -609,7 +606,7 @@ async def _run_batch(
 def main(argv: list[str] | None = None) -> int:
     """Точка входа CLI: preflight → асинхронная генерация → итоговый отчёт."""
     parser = argparse.ArgumentParser(
-        description="Асинхронно создать чек-листы по инвентарным номерам",
+        description="Асинхронно создать чек-листы (zip-merge, оформление как в шаблоне)",
     )
     parser.add_argument(
         "--inv",

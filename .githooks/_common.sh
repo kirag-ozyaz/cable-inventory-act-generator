@@ -72,12 +72,22 @@ pack_encrypted_archive() {
     "$seven_zip" a -t7z -mhe=on -p"$password" data.7z "${paths[@]}"
 }
 
+fix_people_file_location() {
+    if [ -f ".people.xlsx" ] && [ ! -f "$PEOPLE_FILE" ]; then
+        mkdir -p templates
+        mv -f ".people.xlsx" "$PEOPLE_FILE"
+    elif [ -f ".people.xlsx" ]; then
+        rm -f ".people.xlsx"
+    fi
+}
+
 unpack_encrypted_archive() {
     local seven_zip=$1
     local password=$2
 
     mkdir -p Data templates
     "$seven_zip" x -p"$password" -o. data.7z -y
+    fix_people_file_location
 }
 
 unstage_local_secrets() {

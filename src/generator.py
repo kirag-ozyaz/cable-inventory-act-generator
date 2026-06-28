@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import zipfile
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -16,6 +17,7 @@ from src.loaders import SourceData, load_all
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = ROOT / "templates" / "чек-лист_акт_шаблон.xlsx"
+DEFAULT_PEOPLE_FILE = ROOT / "templates" / ".people.xlsx"
 DEFAULT_OUTPUT_DIR = ROOT / "output"
 
 INV_COL = "Инвентарный номер АО УльГЭС"
@@ -378,6 +380,23 @@ def _special_opinion_text(
     )
 
 
+def copy_people_to_output(
+    output_dir: Path,
+    *,
+    source: Path | None = None,
+) -> Path:
+    """Копирует ``templates/.people.xlsx`` в каталог вывода (внешняя ссылка шаблона)."""
+    src = source or DEFAULT_PEOPLE_FILE
+    if not src.is_file():
+        raise ChecklistError(f"Справочник представителей не найден: {src}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / src.name
+    if not dest.is_file() or src.stat().st_mtime > dest.stat().st_mtime:
+        shutil.copy2(src, dest)
+    return dest
+
+
 def _output_path(out_dir: Path, inv: int, part: int, total_parts: int) -> Path:
     """Имя выходного файла: без суффикса при одном файле, иначе ``_N``."""
     if total_parts == 1:
@@ -394,6 +413,91 @@ def _with_copy_suffix(path: Path, copy_index: int) -> Path:
     if copy_index == 1:
         return path.with_name(f"{stem} - Копия{suffix}")
     return path.with_name(f"{stem} - Копия ({copy_index}){suffix}")
+
+
+def _merge_content_types(template_xml: str, output_xml: str) -> str:
+    """Добавляет в ``[Content_Types].xml`` записи из шаблона, которых нет в output."""
+    merged = output_xml
+    for pattern in (
+        r'<Default Extension="bin"[^>]*/>',
+        r'<Override PartName="/xl/drawings/[^"]+"[^>]*/>',
+    ):
+        for match in re.finditer(pattern, template_xml):
+            tag = match.group(0)
+            if tag not in merged:
+                merged = merged.replace("</Types>", f"{tag}</Types>")
+    return merged
+
+
+_RELATIONSHIPS_NS = (
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+)
+
+
+def _ensure_relationships_ns(worksheet_xml: str) -> str:
+    """openpyxl не объявляет ``xmlns:r``, но ``pageSetup``/``drawing`` ссылаются через ``r:id``."""
+    if "xmlns:r=" in worksheet_xml or "r:id" not in worksheet_xml:
+        return worksheet_xml
+    return re.sub(
+        r"(<worksheet\b[^>]*)(>)",
+        lambda m: (
+            m.group(1)
+            + ("" if "xmlns:r=" in m.group(1) else f" {_RELATIONSHIPS_NS}")
+            + m.group(2)
+        ),
+        worksheet_xml,
+        count=1,
+    )
+
+
+def _patch_worksheet_xml(template_xml: str, output_xml: str, *, sheet: str) -> str:
+    """Восстанавливает ``pageSetup r:id`` и ``drawing`` из шаблона."""
+    patched = output_xml
+    page_setup = re.search(r"<pageSetup[^>]*/>", template_xml)
+    if page_setup:
+        patched = re.sub(r"<pageSetup[^>]*/>", page_setup.group(0), patched, count=1)
+
+    if sheet == "sheet1":
+        drawing = re.search(r'<drawing r:id="[^"]+"\s*/>', template_xml)
+        if drawing and "drawing" not in patched:
+            patched = patched.replace("</worksheet>", f"{drawing.group(0)}</worksheet>")
+
+    return _ensure_relationships_ns(patched)
+
+
+def _restore_template_package(template_path: Path, output_path: Path) -> None:
+    """Возвращает в output части xlsx из шаблона, которые openpyxl не сохраняет."""
+    preserve_prefixes = ("xl/drawings/", "xl/printerSettings/")
+    preserve_files = (
+        "xl/worksheets/_rels/sheet1.xml.rels",
+        "xl/worksheets/_rels/sheet2.xml.rels",
+    )
+
+    with zipfile.ZipFile(template_path) as ztpl, zipfile.ZipFile(output_path) as zout:
+        tpl = {info.filename: ztpl.read(info.filename) for info in ztpl.infolist()}
+        out_names = [info.filename for info in zout.infolist()]
+        out = {name: zout.read(name) for name in out_names}
+
+    for name, data in tpl.items():
+        if name.startswith(preserve_prefixes) or name in preserve_files:
+            out[name] = data
+
+    for sheet in ("sheet1", "sheet2"):
+        sheet_name = f"xl/worksheets/{sheet}.xml"
+        out[sheet_name] = _patch_worksheet_xml(
+            tpl[sheet_name].decode("utf-8"),
+            out[sheet_name].decode("utf-8"),
+            sheet=sheet,
+        ).encode("utf-8")
+
+    out["[Content_Types].xml"] = _merge_content_types(
+        tpl["[Content_Types].xml"].decode("utf-8"),
+        out["[Content_Types].xml"].decode("utf-8"),
+    ).encode("utf-8")
+
+    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zout:
+        for name, data in out.items():
+            zout.writestr(name, data)
 
 
 def _write_checklist_file(
@@ -415,6 +519,7 @@ def _write_checklist_file(
             wb = openpyxl.load_workbook(output_path)
             fill_fn(wb)
             wb.save(output_path)
+            _restore_template_package(template_path, output_path)
             return output_path
         except PermissionError:
             copy_index += 1
@@ -535,6 +640,7 @@ def generate_checklist(
 
     out_dir = output_dir or DEFAULT_OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
+    copy_people_to_output(out_dir)
 
     source_data = data or load_all()
     all_objects = collect_objects(source_data, inv)

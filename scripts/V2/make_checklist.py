@@ -1,12 +1,11 @@
-"""Тестовый скрипт: создание чек-листа по инвентарному номеру.
+"""Создание одного чек-листа с сохранением оформления шаблона (zip-merge).
 
-Результат: ``output/чек-лист_{инв}.xlsx`` (до 10 объектов в файле).
-При более 10 объектах — ``чек-лист_{инв}_1.xlsx``, ``…_2.xlsx``, …
+Как ``make_checklist.py``, но без перезаписи ``styles.xml`` openpyxl —
+границы и область печати сохраняются как в ``templates/чек-лист_акт_шаблон.xlsx``.
 
 Примеры:
-    python scripts/make_checklist.py
-    python scripts/make_checklist.py 7260
-    python scripts/make_checklist.py 7260 --act 4167 --date 20.06.2026
+    python scripts/v2/make_checklist.py 7260
+    python scripts/v2/make_checklist.py 7260 --act 4167 --date 2026-06-20
 """
 
 from __future__ import annotations
@@ -16,10 +15,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from src.generator import ChecklistError, generate_checklist  # noqa: E402
+from src.generator import ChecklistError  # noqa: E402
+from src.v2 import generate_checklist  # noqa: E402
 
 
 def _parse_date(value: str):
@@ -32,13 +32,15 @@ def _parse_date(value: str):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Создать чек-лист по инвентарному номеру")
+    parser = argparse.ArgumentParser(
+        description="Создать чек-лист (zip-merge, оформление как в шаблоне)",
+    )
     parser.add_argument(
         "inv",
         nargs="?",
         type=int,
         default=7260,
-        help="инвентарный номер (по умолчанию 7260 — эталонный пример)",
+        help="инвентарный номер (по умолчанию 7260)",
     )
     parser.add_argument("--act", type=int, help="номер акта (ячейка E3)")
     parser.add_argument("--date", type=_parse_date, help="дата акта (ячейка G3)")
