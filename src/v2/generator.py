@@ -30,9 +30,12 @@ from src.generator import (
     _merge_content_types,
     _output_path,
     _with_copy_suffix,
+    build_generation_plan,
     collect_objects,
     copy_people_to_output,
+    eligible_inv_numbers,
     fill_workbook,
+    schedule_processing_order,
 )
 from src.loaders import SourceData, load_all
 
@@ -321,6 +324,8 @@ def generate_checklist(
     act_number: int | str | None = None,
     act_date: date | datetime | None = None,
     data: SourceData | None = None,
+    generation_plan: dict | None = None,
+    people_file: Path | None = None,
 ) -> list[Path]:
     """Создаёт чек-лист(ы) с сохранением оформления шаблона."""
     template_path = template or DEFAULT_TEMPLATE
@@ -329,9 +334,31 @@ def generate_checklist(
 
     out_dir = output_dir or DEFAULT_OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
-    copy_people_to_output(out_dir)
+    copy_people_to_output(out_dir, source=people_file)
 
     source_data = data or load_all()
+
+    if act_number is None or act_date is None:
+        if generation_plan is None:
+            inv_order = schedule_processing_order(
+                source_data.schedule,
+                eligible_inv_numbers(source_data),
+            )
+            generation_plan = build_generation_plan(
+                source_data,
+                inv_order,
+                act_override=act_number,
+                date_override=act_date if isinstance(act_date, date) else None,
+                people_file=people_file,
+            )
+        meta = generation_plan.get(inv)
+        if meta is None:
+            raise ChecklistError(f"Инв. № {inv} отсутствует в плане генерации")
+        if act_number is None:
+            act_number = meta.act_number
+        if act_date is None:
+            act_date = meta.act_date
+
     all_objects = collect_objects(source_data, inv)
     total_objects = len(all_objects)
 
@@ -349,7 +376,14 @@ def generate_checklist(
     for part in range(1, total_parts + 1):
         start = (part - 1) * MAX_OBJECTS_PER_FILE
         chunk = all_objects[start : start + MAX_OBJECTS_PER_FILE]
-        desired_path = _output_path(out_dir, inv, part, total_parts)
+        desired_path = _output_path(
+            out_dir,
+            inv,
+            part,
+            total_parts,
+            act_number=act_number,
+            act_date=act_date,
+        )
         output_path = _write_checklist_file(
             template_path,
             desired_path,

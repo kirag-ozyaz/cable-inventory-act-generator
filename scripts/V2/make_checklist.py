@@ -42,8 +42,17 @@ def main(argv: list[str] | None = None) -> int:
         default=7260,
         help="инвентарный номер (по умолчанию 7260)",
     )
-    parser.add_argument("--act", type=int, help="номер акта (ячейка E3)")
-    parser.add_argument("--date", type=_parse_date, help="дата акта (ячейка G3)")
+    parser.add_argument(
+        "--act",
+        type=int,
+        help="номер акта (E3) для всех файлов; по умолчанию — из графика (№ п/п ДоПИ)",
+    )
+    parser.add_argument(
+        "--date",
+        type=_parse_date,
+        help="дата акта (G3) для всех файлов пакета (запасной вариант); "
+        "по умолчанию — автораспределение по инв. № из .people.xlsx",
+    )
     parser.add_argument(
         "-o",
         "--output-dir",

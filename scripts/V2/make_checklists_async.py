@@ -43,7 +43,9 @@ from src.generator import (  # noqa: E402
     INV_COL,
     ChecklistError,
     _schedule_column,
+    build_generation_plan,
     extract_tp_name,
+    schedule_processing_order,
 )
 from src.v2 import generate_checklist  # noqa: E402
 from src.loaders import SourceData, load_all  # noqa: E402
@@ -105,13 +107,15 @@ def _plan_jobs(
     cables = _cables_inv(data)
 
     if requested is None:
-        to_process = sorted(schedule & cables)
+        eligible = schedule & cables
+        to_process = schedule_processing_order(data.schedule, eligible)
         missing_schedule = sorted(cables - schedule)
         missing_cables = sorted(schedule - cables)
         return to_process, missing_schedule, missing_cables, []
 
     wanted = set(requested)
-    to_process = sorted(wanted & schedule & cables)
+    eligible = wanted & schedule & cables
+    to_process = schedule_processing_order(data.schedule, eligible)
     missing_schedule = sorted(wanted & cables - schedule)
     missing_cables = sorted(wanted & schedule - cables)
     not_found = sorted(wanted - schedule - cables)
@@ -497,8 +501,7 @@ async def _generate_one(
     *,
     executor: ThreadPoolExecutor,
     output_dir: Path,
-    act_number: int | None,
-    act_date,
+    generation_plan,
     data: SourceData,
 ) -> tuple[int, list[Path] | BaseException]:
     """Генерирует чек-лист для одного инв. № в пуле потоков.
@@ -512,9 +515,8 @@ async def _generate_one(
         return generate_checklist(
             inv,
             output_dir=output_dir,
-            act_number=act_number,
-            act_date=act_date,
             data=data,
+            generation_plan=generation_plan,
         )
 
     try:
@@ -529,8 +531,7 @@ async def _run_batch(
     *,
     workers: int,
     output_dir: Path,
-    act_number: int | None,
-    act_date,
+    generation_plan,
     data: SourceData,
     show_progress: bool,
 ) -> tuple[list[tuple[int, list[Path] | BaseException]], bool]:
@@ -555,8 +556,7 @@ async def _run_batch(
                     inv,
                     executor=executor,
                     output_dir=output_dir,
-                    act_number=act_number,
-                    act_date=act_date,
+                    generation_plan=generation_plan,
                     data=data,
                 )
             ): inv
@@ -615,8 +615,17 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="инвентарные номера; если не указаны — все из графика",
     )
-    parser.add_argument("--act", type=int, help="номер акта (ячейка E3)")
-    parser.add_argument("--date", type=_parse_date, help="дата акта (ячейка G3)")
+    parser.add_argument(
+        "--act",
+        type=int,
+        help="номер акта (E3) для всех файлов; по умолчанию — из графика (№ п/п ДоПИ)",
+    )
+    parser.add_argument(
+        "--date",
+        type=_parse_date,
+        help="дата акта (G3) для всех файлов пакета (запасной вариант); "
+        "по умолчанию — автораспределение по инв. № из .people.xlsx",
+    )
     parser.add_argument(
         "-o",
         "--output-dir",
@@ -670,6 +679,13 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(f"Генерация: {len(to_process)} номер(ов), workers={args.workers}")
 
+    generation_plan = build_generation_plan(
+        data,
+        to_process,
+        act_override=args.act,
+        date_override=args.date,
+    )
+
     show_progress = not args.no_progress and sys.stderr.isatty()
 
     generation_errors: list[tuple[int, BaseException]] = []
@@ -687,8 +703,7 @@ def main(argv: list[str] | None = None) -> int:
                         to_process,
                         workers=args.workers,
                         output_dir=args.output_dir,
-                        act_number=args.act,
-                        act_date=args.date,
+                        generation_plan=generation_plan,
                         data=data,
                         show_progress=show_progress,
                     )

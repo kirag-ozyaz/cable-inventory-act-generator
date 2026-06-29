@@ -7,7 +7,7 @@ import shutil
 import zipfile
 from copy import copy
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import openpyxl
@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATE = ROOT / "templates" / "чек-лист_акт_шаблон.xlsx"
 DEFAULT_PEOPLE_FILE = ROOT / "templates" / ".people.xlsx"
 DEFAULT_OUTPUT_DIR = ROOT / "output"
+PARAMS_SHEET = "Параметры"
+DEFAULT_DOCS_PER_DAY = 100
 
 INV_COL = "Инвентарный номер АО УльГЭС"
 TP_PATTERN = re.compile(r"(ТП|РП)-\d+", re.IGNORECASE)
@@ -57,6 +59,14 @@ class ChecklistError(Exception):
 
 
 @dataclass(frozen=True)
+class GenerationMeta:
+    """Номер и дата акта для одного инв. №."""
+
+    act_number: int | str
+    act_date: date
+
+
+@dataclass(frozen=True)
 class ObjectRecord:
     """Один объект (строка списка кабелей) для инв. №."""
 
@@ -70,6 +80,146 @@ class ObjectRecord:
     широта: float | None
     долгота: float | None
     тп: str | None
+
+
+def format_act_date(value: date | datetime) -> str:
+    """Дата для имени файла: ``ДД.ММ.ГГГГ`` (четырёхзначный год)."""
+    if isinstance(value, datetime):
+        value = value.date()
+    return value.strftime("%d.%m.%Y")
+
+
+def load_generation_params(path: Path | None = None) -> tuple[date, int]:
+    """
+    Стартовая дата и лимит инв. № в день из ``templates/.people.xlsx``,
+    лист «Параметры»: B1 — дата, B2 — количество.
+    """
+    file_path = path or DEFAULT_PEOPLE_FILE
+    start_date = date.today()
+    docs_per_day = DEFAULT_DOCS_PER_DAY
+
+    if not file_path.is_file():
+        return start_date, docs_per_day
+
+    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+    try:
+        if PARAMS_SHEET not in wb.sheetnames:
+            return start_date, docs_per_day
+        ws = wb[PARAMS_SHEET]
+        b1 = ws["B1"].value
+        b2 = ws["B2"].value
+    finally:
+        wb.close()
+
+    if b1 is not None:
+        if isinstance(b1, datetime):
+            start_date = b1.date()
+        elif isinstance(b1, date):
+            start_date = b1
+        elif isinstance(b1, str):
+            for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+                try:
+                    start_date = datetime.strptime(b1.strip(), fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+    if b2 is not None:
+        docs_per_day = int(b2)
+
+    return start_date, docs_per_day
+
+
+def schedule_processing_order(schedule: pd.DataFrame, inv_set: set[int]) -> list[int]:
+    """Инв. № в порядке первого появления строк в графике."""
+    seen: set[int] = set()
+    order: list[int] = []
+    for value in schedule[INV_COL]:
+        if pd.isna(value):
+            continue
+        inv = int(value)
+        if inv in inv_set and inv not in seen:
+            seen.add(inv)
+            order.append(inv)
+    return order
+
+
+def lookup_schedule_act_number(schedule: pd.DataFrame, inv: int) -> int | str:
+    """Номер ДоПИ (колонка «№ п/п ДоПИ») для инв. № из графика."""
+    col = _schedule_column(schedule, "п/п", "допи")
+    sch_rows = schedule[schedule[INV_COL] == inv]
+    if sch_rows.empty:
+        raise ChecklistError(f"Инв. № {inv} не найден в графике инвентаризации")
+
+    value = sch_rows.iloc[0][col]
+    if pd.isna(value):
+        raise ChecklistError(f"Для инв. № {inv} не указан номер ДоПИ в графике")
+
+    if isinstance(value, float) and value == int(value):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    return str(value).strip()
+
+
+def assign_act_dates(
+    inv_order: list[int],
+    start_date: date,
+    docs_per_day: int,
+) -> dict[int, date]:
+    """
+    Распределяет даты по инв. №: один номер = одна единица лимита,
+    все части (_1, _2, …) одного номера получают одну дату.
+    """
+    if docs_per_day < 1:
+        raise ChecklistError(f"Лимит документов в день должен быть ≥ 1, получено {docs_per_day}")
+
+    result: dict[int, date] = {}
+    day_offset = 0
+    inv_in_current_day = 0
+
+    for inv in inv_order:
+        result[inv] = start_date + timedelta(days=day_offset)
+        inv_in_current_day += 1
+        if inv_in_current_day >= docs_per_day:
+            inv_in_current_day = 0
+            day_offset += 1
+
+    return result
+
+
+def build_generation_plan(
+    data: SourceData,
+    inv_order: list[int],
+    *,
+    act_override: int | str | None = None,
+    date_override: date | None = None,
+    people_file: Path | None = None,
+) -> dict[int, GenerationMeta]:
+    """Номера и даты актов для списка инв. № в порядке обработки."""
+    start_date, docs_per_day = load_generation_params(people_file)
+
+    if date_override is not None:
+        inv_dates = {inv: date_override for inv in inv_order}
+    else:
+        inv_dates = assign_act_dates(inv_order, start_date, docs_per_day)
+
+    plan: dict[int, GenerationMeta] = {}
+    for inv in inv_order:
+        act_number = (
+            act_override
+            if act_override is not None
+            else lookup_schedule_act_number(data.schedule, inv)
+        )
+        plan[inv] = GenerationMeta(act_number=act_number, act_date=inv_dates[inv])
+    return plan
+
+
+def eligible_inv_numbers(data: SourceData) -> set[int]:
+    """Инв. №, присутствующие и в графике, и в списке кабелей."""
+    schedule = {int(v) for v in data.schedule[INV_COL].dropna()}
+    cables = {int(v) for v in data.cables["инв_номер"].dropna()}
+    return schedule & cables
 
 
 def _schedule_column(schedule: pd.DataFrame, *needles: str) -> str:
@@ -361,13 +511,18 @@ def _special_opinion_text(
     obj_to: int,
     total_objects: int,
     act_number: int | str | None,
+    act_date: date | datetime | None = None,
 ) -> str:
     """Текст в B57 при разбиении инв. № на несколько файлов (продолжение акта)."""
     act_part = f" № {act_number}" if act_number is not None else ""
+    next_suffix = ""
+    if act_number is not None and act_date is not None:
+        next_suffix = f" ({act_number}, {format_act_date(act_date)})"
+    next_file = f"чек-лист_{inv}_{part + 1}{next_suffix}.xlsx"
     if part == 1:
         return (
             f"Инв. № {inv}. Акт{act_part}. Объекты {obj_from}–{obj_to} из {total_objects}. "
-            f"Продолжение — файл чек-лист_{inv}_{part + 1}.xlsx."
+            f"Продолжение — файл {next_file}."
         )
     if part == total_parts:
         return (
@@ -376,7 +531,7 @@ def _special_opinion_text(
         )
     return (
         f"Инв. № {inv}. Акт{act_part} (продолжение). Объекты {obj_from}–{obj_to} из {total_objects}. "
-        f"Продолжение — файл чек-лист_{inv}_{part + 1}.xlsx."
+        f"Продолжение — файл {next_file}."
     )
 
 
@@ -397,11 +552,20 @@ def copy_people_to_output(
     return dest
 
 
-def _output_path(out_dir: Path, inv: int, part: int, total_parts: int) -> Path:
-    """Имя выходного файла: без суффикса при одном файле, иначе ``_N``."""
-    if total_parts == 1:
-        return out_dir / f"чек-лист_{inv}.xlsx"
-    return out_dir / f"чек-лист_{inv}_{part}.xlsx"
+def _output_path(
+    out_dir: Path,
+    inv: int,
+    part: int,
+    total_parts: int,
+    *,
+    act_number: int | str | None = None,
+    act_date: date | datetime | None = None,
+) -> Path:
+    """Имя выходного файла с номером и датой акта в скобках."""
+    base = f"чек-лист_{inv}" if total_parts == 1 else f"чек-лист_{inv}_{part}"
+    if act_number is not None and act_date is not None:
+        base = f"{base} ({act_number}, {format_act_date(act_date)})"
+    return out_dir / f"{base}.xlsx"
 
 
 def _with_copy_suffix(path: Path, copy_index: int) -> Path:
@@ -592,8 +756,7 @@ def fill_workbook(
     # if h20:
     #     _set(act, "B64", abbreviate_fio(str(h20).strip()))
 
-    _set(chk, "I4", header.наименование)
-    _set(chk, "G4", header.адрес)
+    _set(chk, "D4", header.адрес)
 
     # При count > 1 вставляет строки объектов и сдвигает блок представителей вниз.
     check_rows = _ensure_check_object_rows(chk, count)
@@ -620,6 +783,7 @@ def fill_workbook(
                 obj_to=obj_to,
                 total_objects=total_objects,
                 act_number=act_number,
+                act_date=act_date,
             ),
         )
 
@@ -632,17 +796,41 @@ def generate_checklist(
     act_number: int | str | None = None,
     act_date: date | datetime | None = None,
     data: SourceData | None = None,
+    generation_plan: dict[int, GenerationMeta] | None = None,
+    people_file: Path | None = None,
 ) -> list[Path]:
-    """Создаёт один или несколько файлов ``чек-лист_{инв}[_N].xlsx``."""
+    """Создаёт один или несколько файлов ``чек-лист_{инв} (номер, дата).xlsx``."""
     template_path = template or DEFAULT_TEMPLATE
     if not template_path.is_file():
         raise ChecklistError(f"Шаблон не найден: {template_path}")
 
     out_dir = output_dir or DEFAULT_OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
-    copy_people_to_output(out_dir)
+    copy_people_to_output(out_dir, source=people_file)
 
     source_data = data or load_all()
+
+    if act_number is None or act_date is None:
+        if generation_plan is None:
+            inv_order = schedule_processing_order(
+                source_data.schedule,
+                eligible_inv_numbers(source_data),
+            )
+            generation_plan = build_generation_plan(
+                source_data,
+                inv_order,
+                act_override=act_number,
+                date_override=act_date if isinstance(act_date, date) else None,
+                people_file=people_file,
+            )
+        meta = generation_plan.get(inv)
+        if meta is None:
+            raise ChecklistError(f"Инв. № {inv} отсутствует в плане генерации")
+        if act_number is None:
+            act_number = meta.act_number
+        if act_date is None:
+            act_date = meta.act_date
+
     all_objects = collect_objects(source_data, inv)
     total_objects = len(all_objects)
 
@@ -662,7 +850,14 @@ def generate_checklist(
     for part in range(1, total_parts + 1):
         start = (part - 1) * MAX_OBJECTS_PER_FILE
         chunk = all_objects[start : start + MAX_OBJECTS_PER_FILE]
-        desired_path = _output_path(out_dir, inv, part, total_parts)
+        desired_path = _output_path(
+            out_dir,
+            inv,
+            part,
+            total_parts,
+            act_number=act_number,
+            act_date=act_date,
+        )
         output_path = _write_checklist_file(
             template_path,
             desired_path,
